@@ -1,0 +1,1032 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: "Contacts dashboard for Ground Station solution back-end deployment: S3 Buckets, Cost and Usage Report, Lambda functions, EventBridge rule and Glue crawlers."
+
+Parameters:
+
+  S3BucketCUR:
+    Type: String
+    Description: Name for the S3 bucket that will contain the AWS Cost and Usage Report. CloudFormation stack name will be added as a prefix to the name of the bucket.
+    Default: "cur-111111111111"
+    AllowedPattern: "^[a-z0-9-]+$"
+
+  S3BucketGS:
+    Type: String
+    Description: Name for the S3 bucket that will contain the AWS Ground Station contacts information. CloudFormation stack name will be added as a prefix to the name of the bucket.
+    Default: "gs-111111111111"
+    AllowedPattern: "^[a-z0-9-]+$"
+
+  ContactsMaxAge:
+    Type: String
+    Description: Number of days to use when importing AWS Ground Station historical data. Contacts older than this period will not be considered.
+    Default: 60
+    AllowedPattern: "^[0-9]+$"
+
+  CURReportName:
+    Type: String
+    Description: Name for the Cost and Usage Report that will be created in the account.
+    Default: "cur-report"
+    AllowedPattern: "^[a-z0-9-]+$"
+
+  ApplicationTag:
+    Type: String
+    Description: Tag value for the tag that is added to the created resources. Tag key will be 'application'.
+    Default: 'gs-contact-reporting'
+    AllowedPattern: "^[a-z0-9-]+$"
+
+  GSCrawlerCronScheduleExpression:
+    Type: "String"
+    Description: "Execution frequency of the AWS Ground Station data Glue Crawler using a cron expression."
+    Default: "*/30 * * * ? *"
+
+  FailureNotificationEmail:
+    Type: "String"
+    Description: "Email address to send failure notifications to."
+    Default: "example@example.com"
+
+Conditions:
+  IsNorthVirginia: !Equals [!Ref 'AWS::Region', 'us-east-1']
+  DeployCURViaLambda: !Not [!Condition IsNorthVirginia]
+  DeployCURViaCFN: !Condition IsNorthVirginia
+
+Mappings:
+  RegionMap:
+    af-south-1:
+      "PandasLambda": "arn:aws:lambda:af-south-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    ap-northeast-1:
+      "PandasLambda": "arn:aws:lambda:ap-northeast-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    ap-northeast-2:
+      "PandasLambda": "arn:aws:lambda:ap-northeast-2:336392948345:layer:AWSSDKPandas-Python311:1"
+    ap-northeast-3:
+      "PandasLambda": "arn:aws:lambda:ap-northeast-3:336392948345:layer:AWSSDKPandas-Python311:1"
+    ap-south-1:
+      "PandasLambda": "arn:aws:lambda:ap-south-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    ap-southeast-1:
+      "PandasLambda": "arn:aws:lambda:ap-southeast-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    ap-southeast-2:
+      "PandasLambda": "arn:aws:lambda:ap-southeast-2:336392948345:layer:AWSSDKPandas-Python311:1"
+    ca-central-1:
+      "PandasLambda": "arn:aws:lambda:ca-central-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    eu-central-1:
+      "PandasLambda": "arn:aws:lambda:eu-central-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    eu-north-1:
+      "PandasLambda": "arn:aws:lambda:eu-north-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    eu-west-1:
+      "PandasLambda": "arn:aws:lambda:eu-west-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    eu-west-2:
+      "PandasLambda": "arn:aws:lambda:eu-west-2:336392948345:layer:AWSSDKPandas-Python311:1"
+    eu-west-3:
+      "PandasLambda": "arn:aws:lambda:eu-west-3:336392948345:layer:AWSSDKPandas-Python311:1"
+    sa-east-1:
+      "PandasLambda": "arn:aws:lambda:sa-east-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    us-east-1:
+      "PandasLambda": "arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    us-east-2:
+      "PandasLambda": "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python311:1"
+    us-west-1:
+      "PandasLambda": "arn:aws:lambda:us-west-1:336392948345:layer:AWSSDKPandas-Python311:1"
+    us-west-2:
+      "PandasLambda": "arn:aws:lambda:us-west-2:336392948345:layer:AWSSDKPandas-Python311:1"
+    ap-east-1:
+      "PandasLambda": "arn:aws:lambda:ap-east-1:839552336658:layer:AWSSDKPandas-Python311:1"
+    ap-south-2:
+      "PandasLambda": "arn:aws:lambda:ap-south-2:246107603503:layer:AWSSDKPandas-Python311:1"
+    ap-southeast-3:
+      "PandasLambda": "arn:aws:lambda:ap-southeast-3:258944054355:layer:AWSSDKPandas-Python311:1"
+    ap-southeast-4:
+      "PandasLambda": "arn:aws:lambda:ap-southeast-4:945386623051:layer:AWSSDKPandas-Python311:1"
+    eu-central-2:
+      "PandasLambda": "arn:aws:lambda:eu-central-2:956415814219:layer:AWSSDKPandas-Python311:1"
+    eu-south-1:
+      "PandasLambda": "arn:aws:lambda:eu-south-1:774444163449:layer:AWSSDKPandas-Python311:1"
+    eu-south-2:
+      "PandasLambda": "arn:aws:lambda:eu-south-2:982086096842:layer:AWSSDKPandas-Python311:1"
+    me-south-1:
+      "PandasLambda": "arn:aws:lambda:me-south-1:938046470361:layer:AWSSDKPandas-Python311:1"
+
+Resources:
+
+###########################################################################
+# S3 buckets and bucket policies
+###########################################################################
+
+  MyAthenaQueryResultsBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: S3 access logging not setup in this solution as the target S3 logging bucket is not know at this time
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      BucketName: !Sub "${AWS::StackName}-athena-query-results-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      AccessControl: BucketOwnerFullControl
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteContent
+            Status: 'Enabled'
+            ExpirationInDays: 7
+
+  # S3 Bucket policy that enforces encryption in transit
+  MyAthenaQueryResultsBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref MyAthenaQueryResultsBucket
+      PolicyDocument:
+        Id: MyAthenaQueryResultsBucketPolicy
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "DenyNonSSLRequests"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${AWS::StackName}-athena-query-results-${AWS::AccountId}-${AWS::Region}"
+              - !Sub "arn:${AWS::Partition}:s3:::${AWS::StackName}-athena-query-results-${AWS::AccountId}-${AWS::Region}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+  GSContactsInformationBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: S3 access logging not setup in this solution as the target S3 logging bucket is not know at this time
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      BucketName: !Sub "${AWS::StackName}-${S3BucketGS}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      AccessControl: BucketOwnerFullControl
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # S3 Bucket policy that enforces encryption in transit
+  GSContactsInformationBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref GSContactsInformationBucket
+      PolicyDocument:
+        Id: S3BucketGSPolicy
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "DenyNonSSLRequests"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketGS}"
+              - !Sub "arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketGS}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+  CURBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: S3 access logging not setup in this solution as the target S3 logging bucket is not know at this time
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      BucketName: !Sub "${AWS::StackName}-${S3BucketCUR}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      AccessControl: BucketOwnerFullControl
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  S3BucketCURPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref CURBucket
+      PolicyDocument:
+        Id: S3BucketCURPolicy
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowReadBilling
+            Effect: Allow
+            Principal:
+              Service: billingreports.amazonaws.com
+            Action:
+              - s3:GetBucketAcl
+              - s3:GetBucketPolicy
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketCUR}'
+              - !Sub 'arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketCUR}/*'
+          - Sid: AllowWriteBilling
+            Effect: Allow
+            Principal:
+              Service: billingreports.amazonaws.com
+            Action:
+              - s3:PutObject
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketCUR}/*'
+          - Sid: "DenyNonSSLRequests"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketCUR}"
+              - !Sub "arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketCUR}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+###########################################################################
+# GS Contacts Lambda Function
+###########################################################################
+  GSInformationLambda:
+    DependsOn: GSContactsInformationBucket
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: Function is not required in a VPC; deploying outside a VPC simplifies deployment
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      ReservedConcurrentExecutions: 10
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      MemorySize: 300
+      Timeout: 120
+      Role: !GetAtt GSInformationLambdaRole.Arn
+      Environment:
+        Variables:
+          S3BucketGS: !Sub "${AWS::StackName}-${S3BucketGS}"
+          ContactsMaxAge: !Ref ContactsMaxAge
+      Layers:
+        - !FindInMap [RegionMap, !Ref "AWS::Region", "PandasLambda"]
+      Code:
+        ZipFile:
+          |
+          '''
+          Processes contact information from the AWS Ground Station service and writes the data to an S3 bucket.
+          Args:
+            event (dict): The event object containing the contact information.
+          Returns:
+            None
+          '''
+
+          import boto3
+          import awswrangler as wr
+          import pandas as pd
+          import os
+          from datetime import datetime
+          import logging
+          import time
+
+          default_log_args = {
+              "level": logging.DEBUG if os.environ.get("DEBUG", False) else logging.INFO,
+              "format": "%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+              "datefmt": "%d-%b-%y %H:%M",
+              "force": True,
+          }
+
+          logging.basicConfig(**default_log_args)
+          logger = logging.getLogger("Run-Lambda")
+
+          def default(o):
+              if isinstance(o, (date, datetime)):
+                  return o.isoformat()
+
+          def lambda_handler(event, context):
+
+              groundstationMain = boto3.client('groundstation');
+
+              try:
+                contact_info = groundstationMain.describe_contact(contactId=event['detail']['contactId']);
+              except Exception as err:
+                logger.error("Error calling AWS Ground Station: %s: %s", err.response['Error']['Code'], err.response['Error']['Message'])
+
+              logger.debug(event)
+              logger.info("Processing Contact Id: " + contact_info['contactId'])
+
+              required_keys = ['contactId','contactStatus','endTime','groundStation','maximumElevation','missionProfileArn','postPassEndTime','prePassStartTime','region','satelliteArn','startTime','tags']
+
+              required_contact_info = {x:contact_info[x] for x in required_keys if x in contact_info}
+              required_contact_info["tags"] = [required_contact_info["tags"]]
+              required_contact_info["maximumElevation"] = [required_contact_info["maximumElevation"]]
+
+              contactdf = pd.DataFrame(required_contact_info)
+
+              if 'tags' in contactdf:
+                contactdf['tags'] = contactdf['tags'].astype(str)
+
+              if 'maximumElevation' in contactdf:
+                contactdf['maximumElevation'] = contactdf['maximumElevation'].astype(str)
+
+              # Wait for the contact status to change from "SCHEDULING" or "CANCELLING" to a final status
+              while (required_contact_info["contactStatus"] == "SCHEDULING" or required_contact_info["contactStatus"] == "CANCELLING"):
+                logger.info("Waiting for final contact status")
+                time.sleep(30)
+
+              contactId = required_contact_info['contactId']
+              startTime = required_contact_info['startTime']
+
+              s3_url = 's3://' + os.environ['S3BucketGS'] + '/' + str(startTime.year) + '/' + str(startTime.month).zfill(2) + '/' + str(startTime.day).zfill(2) + '/' + contactId + '.parquet'
+
+              if required_contact_info['startTime'] != '':
+                logger.info("Got contact info. Writing data to S3 bucket: " + s3_url)
+                try:
+                  wr.s3.to_parquet(contactdf,s3_url)
+                except Exception as err:
+                  logger.error("Error writing to S3: %s: %s", err.response['Error']['Code'], err.response['Error']['Message'])
+              else:
+                logger.info("No startTime in contact info, quitting")
+
+              return
+
+  GSInformationLambdaRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - groundstation:DescribeContact
+            Resource:
+              - '*'
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+            Resource:
+              - Fn::Sub:
+                - "arn:aws:s3:::${AWS::StackName}-${S3BucketGS}/*"
+                - S3BucketGS: !Ref S3BucketGS
+          - Effect: Allow
+            Action:
+              - glue:StartCrawler
+            Resource:
+              - Fn::Sub:
+                - arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${AWSGSCrawler}
+                - AWSGSCrawler: !Ref AWSGSCrawler
+          - Effect: Allow
+            Action:
+              - sns:Publish
+            Resource:
+              - !Ref GSInformationLambdaSNS
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W13
+            reason: s* permission is required to allow access to all current and future contacts
+
+
+  GSInformationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      Path: '/'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Ref GSInformationLambdaRolePolicy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action:
+            - sts:AssumeRole
+  
+  GSInformationLambdaDestination:
+    Type: AWS::Lambda::EventInvokeConfig
+    DependsOn: GSInformationLambdaSNS
+    Properties:
+      DestinationConfig: 
+        OnFailure:
+            Destination: !Ref GSInformationLambdaSNS
+      FunctionName: !Ref GSInformationLambda
+      Qualifier: $LATEST
+
+  GSInformationLambdaSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint:  !Sub "${FailureNotificationEmail}"
+          Protocol: "email"
+      TopicName: !Sub "${AWS::StackName}-GSContactChange-LambdaFailure"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  GroundStationEventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "This rule watches for Ground Station contacts status changes."
+      EventPattern:
+        source:
+          - "aws.groundstation"
+        detail-type:
+          - "Ground Station Contact State Change"
+        detail:
+          contactStatus:
+            - "AWS_CANCELLED"
+            - "AWS_FAILED"
+            - "CANCELLED"
+            - "COMPLETED"
+            - "FAILED"
+            - "FAILED_TO_SCHEDULE"
+            - "SCHEDULED"
+      Name: "GSContactChangeRule"
+      State: "ENABLED"
+      Targets:
+        - Arn: !GetAtt GSInformationLambda.Arn
+          Id: "CloudWatchEventHandler"
+
+  PermissionForGroundStationCloudWatchEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GSInformationLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt GroundStationEventBridgeRule.Arn
+
+###########################################################################
+# GS Contacts Historic Data Lambda Function
+###########################################################################
+
+  HistoricInformationLambdaCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        !Sub
+        - arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaFunctionName}
+        - { LambdaFunctionName: !Ref HistoricGSInformationLambda }
+
+  HistoricGSInformationLambda:
+    DependsOn: GSContactsInformationBucket
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: Function is not required in a VPC; deploying outside a VPC simplifies deployment
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      ReservedConcurrentExecutions: 10
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      MemorySize: 512
+      Timeout: 900
+      Role: !GetAtt HistoricGSInformationLambdaRole.Arn
+      Environment:
+        Variables:
+          S3BucketGS: !Sub "${AWS::StackName}-${S3BucketGS}"
+          ContactsMaxAge: !Ref ContactsMaxAge
+      Layers:
+        - !FindInMap [RegionMap, !Ref "AWS::Region", "PandasLambda"]
+      Code:
+        ZipFile:
+          |
+          import boto3
+          from datetime import datetime, date, timedelta
+          import os
+          import awswrangler as wr
+          import pandas as pd
+          import cfnresponse
+          import logging
+
+          default_log_args = {
+              "level": logging.DEBUG if os.environ.get("DEBUG", False) else logging.INFO,
+              "format": "%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+              "datefmt": "%d-%b-%y %H:%M",
+              "force": True,
+          }
+
+          logging.basicConfig(**default_log_args)
+          logger = logging.getLogger("Run-Lambda")
+
+          def default(o):
+              if isinstance(o, (date, datetime)):
+                  return o.isoformat()
+
+          def lambda_handler(event, context):
+
+              logger.info("Running GS list-contacts API")
+
+              groundstationMain = boto3.client('groundstation')
+
+              datetoday = datetime.today()
+              datetodaystr = datetoday.strftime('%Y-%m-%d')
+              startdate = datetoday - timedelta(days=float(os.environ['ContactsMaxAge']))
+              startdatestr = startdate.strftime('%Y-%m-%d')
+              enddate = datetoday + timedelta(days=60)
+              enddatestr = enddate.strftime('%Y-%m-%d')
+
+              try:
+                contacts = groundstationMain.list_contacts(endTime=datetime.fromisoformat(enddatestr),startTime=datetime.fromisoformat(startdatestr),statusList=['AWS_CANCELLED','AWS_FAILED','CANCELLED','CANCELLING','COMPLETED','FAILED','FAILED_TO_SCHEDULE','PASS','POSTPASS','PREPASS','SCHEDULED','SCHEDULING'])
+              except Exception as err:
+                logger.error("Error running GS list-contacts: %s: %s", err.response['Error']['Code'], err.response['Error']['Message'])
+                try:
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                except:
+                  logger.error("Error sending CFN response: ", err.response['Error']['Code'], err.response['Error']['Message'])
+                return
+
+              logger.info("Found info for " + str(len(contacts['contactList'])) + " contacts")
+
+              contactsdf = pd.DataFrame(contacts['contactList'])
+
+              if 'tags' in contactsdf:
+                contactsdf['tags'] = contactsdf['tags'].astype(str)
+              if 'maximumElevation' in contactsdf:
+                contactsdf['maximumElevation'] = contactsdf['maximumElevation'].astype(str)
+
+              for index, row in contactsdf.iterrows():
+                  startTime = row['startTime']
+                  contactId = row['contactId']
+
+                  s3_url = 's3://' + os.environ['S3BucketGS'] + '/' + str(startTime.year) + '/' + str(startTime.month).zfill(2) + '/' + str(startTime.day).zfill(2) + '/' + contactId + '.parquet'
+                  logger.info("Writing data to " + s3_url)
+
+                  try:
+                    wr.s3.to_parquet(contactsdf.iloc[[index]],s3_url)
+                  except Exception as err:
+                    logger.error("Error writing to S3 bucket: %s: %s", err.response['Error']['Code'], err.response['Error']['Message'])
+                    try:
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                    except:
+                      logger.error("Error sending CFN response: ", err.response['Error']['Code'], err.response['Error']['Message'])
+                    return
+
+              # Start crawler
+
+              logger.info("Starting AWSGSCrawler")
+              glue_client = boto3.client('glue')
+
+              try:
+                glue_client.start_crawler(Name="AWSGSCrawler")
+              except Exception as err:
+                logger.error("Error starting crawler: %s: %s", err.response['Error']['Code'], err.response['Error']['Message'])
+                try:
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                except:
+                  logger.error("Error sending CFN response: ", err.response['Error']['Code'], err.response['Error']['Message'])
+                return
+              try:
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except:
+                logger.error("Error sending CFN response: ", err.response['Error']['Code'], err.response['Error']['Message'])
+
+  HistoricGSInformationLambdaRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - groundstation:ListContacts
+            Resource:
+              - '*'
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+            Resource:
+              - Fn::Sub:
+                - "arn:aws:s3:::${AWS::StackName}-${S3BucketGS}/*"
+                - S3BucketGS: !Ref S3BucketGS
+          - Effect: Allow
+            Action:
+              - glue:StartCrawler
+            Resource:
+              - Fn::Sub:
+                - arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${AWSGSCrawler}
+                - AWSGSCrawler: !Ref AWSGSCrawler
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W13
+            reason: s* permission is required to allow access to all current and future contacts
+
+  HistoricGSInformationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      Path: '/'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Ref HistoricGSInformationLambdaRolePolicy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action:
+            - sts:AssumeRole
+
+###########################################################################
+## CUR
+###########################################################################
+
+## Deploy CUR natively via CFN resource if we are in us-east-1
+  LocalCur:
+    Type: AWS::CUR::ReportDefinition
+    Condition: DeployCURViaCFN
+    DependsOn:
+      - S3BucketCURPolicy
+    Properties:
+      AdditionalArtifacts:
+        - ATHENA
+      AdditionalSchemaElements:
+        - RESOURCES
+      Compression: Parquet
+      Format: Parquet
+      RefreshClosedReports: True
+      ReportName: !Ref CURReportName
+      ReportVersioning: OVERWRITE_REPORT
+      S3Bucket: !Sub "${AWS::StackName}-${S3BucketCUR}"
+      S3Prefix: !Sub "cur/${AWS::AccountId}"
+      S3Region: !Ref AWS::Region
+      TimeUnit: HOURLY
+
+  # Deploy CUR via lambda due to missing cfn resource definition
+  # AWS::CUR::ReportDefinition outside us-east-1
+  CURoutsideUSEAST1:
+    Type: Custom::CURCreator
+    Condition: DeployCURViaLambda
+    Properties:
+      ServiceToken: !GetAtt CIDLambdaCURCreator.Arn
+      ReportDefinition:
+        AdditionalArtifacts:
+          - ATHENA
+        AdditionalSchemaElements:
+          - RESOURCES
+        Compression: Parquet
+        Format: Parquet
+        RefreshClosedReports: True
+        ReportName: !Ref CURReportName
+        ReportVersioning: OVERWRITE_REPORT
+        S3Bucket: !Sub "${AWS::StackName}-${S3BucketCUR}"
+        S3Prefix: !Sub "cur/${AWS::AccountId}"
+        S3Region: !Ref AWS::Region
+        TimeUnit: HOURLY
+
+# Lambda CUR Creator: used to create cur from outside us-east-1
+
+  CIDLambdaCURCreatorRole: #Execution role for the custom resource CIDLambdaAnalyticsExecutor
+    Type: AWS::IAM::Role
+    Condition: DeployCURViaLambda
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      Path:
+        Fn::Sub: /${CURReportName}/
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: "ExecutionDefault"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:CreateLogGroup
+              Resource:
+              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${CURReportName}-CID-CURCreator"
+              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${CURReportName}-CID-CURCreator:*"
+              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${CURReportName}-CID-CURCreator:*:*"
+        - PolicyName: "ExecutionSpecific"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - cur:PutReportDefinition
+              - cur:ModifyReportDefinition
+              - cur:DeleteReportDefinition
+              Resource:
+                - Fn::Sub: arn:${AWS::Partition}:cur:us-east-1:${AWS::AccountId}:definition/*
+
+  CIDLambdaCURCreator:
+    Type: AWS::Lambda::Function
+    Condition: DeployCURViaLambda
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: Function is not required in a VPC; deploying outside a VPC simplifies deployment
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      ReservedConcurrentExecutions: 10
+      Runtime: python3.11
+      FunctionName:
+        Fn::Sub: ${CURReportName}-CID-CURCreator
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Role:
+        Fn::GetAtt: CIDLambdaCURCreatorRole.Arn
+      Timeout: 15
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import uuid
+          import json
+
+          # Create a cur client in us-east-1 region
+          client = boto3.client('cur', region_name='us-east-1')
+
+          def lambda_handler(event, context):
+
+            print(json.dumps(event))
+            reason = ""
+
+            try:
+              report = event['ResourceProperties']['ReportDefinition']
+              report_name = event['ResourceProperties']['ReportDefinition']['ReportName']
+
+              refresh_closed_report = event['ResourceProperties']['ReportDefinition']["RefreshClosedReports"]
+              if refresh_closed_report in ["True", "true"]:
+                  report["RefreshClosedReports"] = True
+              elif refresh_closed_report in ["False", "false"]:
+                  report["RefreshClosedReports"] = False
+              else:
+                  raise Exception("RefreshClosedReports is not a boolean")
+
+              if event['RequestType'] == 'Create':
+                  res = client.put_report_definition(
+                      ReportDefinition=report
+                  )
+                  print(json.dumps(res))
+              elif event['RequestType'] == 'Update':
+                  old_report_name = event['OldResourceProperties']['ReportDefinition']['ReportName']
+                  if report["ReportName"] != old_report_name:
+                      res = client.put_report_definition(
+                          ReportDefinition=report
+                      )
+                      print(json.dumps(res))
+                  else:
+                      res = client.modify_report_definition(
+                          ReportName=old_report_name,
+                          ReportDefinition=report
+                      )
+                      print(json.dumps(res))
+              elif event['RequestType'] == 'Delete':
+                  try:
+                      res = client.delete_report_definition(
+                          ReportName=report_name
+                      )
+                      print(json.dumps(res))
+                  except:
+                      pass # Do not block deletion
+              else:
+                  raise Exception("Unknown operation: " + event['RequestType'])
+
+            except Exception as e:
+                reason = str(e)
+                print(e)
+            finally:
+                physicalResourceId = event.get('ResourceProperties',{}).get('ReportDefinition').get('ReportName', None) or str(uuid.uuid1())
+                if reason:
+                    print("FAILURE")
+                    cfnresponse.send(event, context, cfnresponse.FAILED, {"Data": reason }, physicalResourceId)
+                else:
+                    print("SUCCESS")
+                    cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physicalResourceId)
+
+
+###########################################################################
+# CUR Crawler
+###########################################################################
+  AWSGSDashboardDatabase:
+    Type: 'AWS::Glue::Database'
+    Properties:
+      DatabaseInput:
+        Name: 'gsdashboard'
+      CatalogId: !Ref AWS::AccountId
+
+  AWSCURCrawlerRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSGlueServiceRole'
+      Policies:
+        - PolicyName: AWSCURCrawlerRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: !Sub 'arn:${AWS::Partition}:logs:*:*:*:/aws-glue/*'
+              - Effect: Allow
+                Action:
+                  - 'glue:UpdateDatabase'
+                  - 'glue:UpdatePartition'
+                  - 'glue:CreateTable'
+                  - 'glue:UpdateTable'
+                  - 'glue:ImportCatalogToGlue'
+                  - 'glue:TagResource'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${AWSGSDashboardDatabase}'
+                  - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${AWSGSDashboardDatabase}/*'
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketCUR}/cur/${AWS::AccountId}/${CURReportName}/${CURReportName}*'
+
+  AWSCURCrawler:
+    Type: 'AWS::Glue::Crawler'
+    DependsOn:
+      - AWSGSDashboardDatabase
+      - AWSCURCrawlerRole
+    Properties:
+      Name: AWSCURCrawler
+      Description: A recurring crawler that keeps your CUR table in Athena up-to-date.
+      Role: !GetAtt AWSCURCrawlerRole.Arn
+      DatabaseName: !Ref AWSGSDashboardDatabase
+      Targets:
+        S3Targets:
+          - Path: !Sub 's3://${AWS::StackName}-${S3BucketCUR}/cur/${AWS::AccountId}/${CURReportName}/${CURReportName}'
+            Exclusions:
+              - '**.json'
+              - '**.yml'
+              - '**.sql'
+              - '**.csv'
+              - '**.gz'
+              - '**.zip'
+      SchemaChangePolicy:
+        UpdateBehavior: UPDATE_IN_DATABASE
+        DeleteBehavior: DELETE_FROM_DATABASE
+      Schedule:
+        ScheduleExpression: "cron(0 2 * * ? *)"
+      Tags:
+        "application": !Sub '${ApplicationTag}'
+
+###########################################################################
+# GS Contacts Information crawler
+###########################################################################
+
+  AWSGSCrawler:
+    Type: 'AWS::Glue::Crawler'
+    DependsOn:
+      - AWSGSDashboardDatabase
+      - AWSGSCrawlerRole
+    Properties:
+      Name: AWSGSCrawler
+      Description: A recurring crawler that keeps your GS table in Athena up-to-date.
+      Role: !GetAtt AWSGSCrawlerRole.Arn
+      DatabaseName: !Ref AWSGSDashboardDatabase
+      Targets:
+        S3Targets:
+          - Path: !Sub 's3://${AWS::StackName}-${S3BucketGS}'
+      Schedule:
+        ScheduleExpression: !Sub "cron(${GSCrawlerCronScheduleExpression})"
+      RecrawlPolicy:
+        RecrawlBehavior: CRAWL_NEW_FOLDERS_ONLY
+      Tags:
+        "application": !Sub '${ApplicationTag}'
+
+  AWSGSCrawlerRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSGlueServiceRole'
+      Policies:
+        - PolicyName: AWSGSCrawlerPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: !Sub 'arn:${AWS::Partition}:logs:*:*:*:/aws-glue/*'
+              - Effect: Allow
+                Action:
+                  - 'glue:UpdateDatabase'
+                  - 'glue:UpdatePartition'
+                  - 'glue:CreateTable'
+                  - 'glue:UpdateTable'
+                  - 'glue:ImportCatalogToGlue'
+                  - 'glue:TagResource'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${AWSGSDashboardDatabase}'
+                  - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${AWSGSDashboardDatabase}/*'
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${AWS::StackName}-${S3BucketGS}/*'
+Outputs:
+
+  CurBucket:
+    Value: !Sub "${AWS::StackName}-${S3BucketCUR}"
+    Export:
+      Name: !Sub "${AWS::StackName}-${S3BucketCUR}"
+
+  AthenaBucket:
+    Value: !Sub "${AWS::StackName}-athena-query-results-${AWS::AccountId}-${AWS::Region}"
+    Export:
+      Name: !Sub "${AWS::StackName}-athena-query-results-cid-bucket"
+
+  GsContactsBucket:
+    Value: !Sub "${AWS::StackName}-${S3BucketGS}"
+    Export:
+      Name: !Sub "${AWS::StackName}-${S3BucketGS}"

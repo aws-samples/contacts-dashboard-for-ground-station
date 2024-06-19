@@ -1,0 +1,743 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: "Contacts dashboard for Ground Station solution: Athena view and Quicksight dashboard deployment."
+
+Parameters:
+
+  GStable:
+    Type: String
+    Description: Name of the Athena table storing Ground Station contacts data.
+    Default: "gs-contact-reporting-contacts-1111"
+    AllowedPattern: "^([a-z]|[0-9]|[-]|[a-z]|[_])+$"
+
+  CURtable:
+    Type: String
+    Description: Name of the Athena table storing CUR report data.
+    Default: "cur_report"
+    AllowedPattern: "^([a-z]|[0-9]|[-]|[a-z]|[_])+$"
+
+  GsContactPart1StackName:
+    Type: String
+    Description: Name of CloudFormation Stack created using the part 1 template.
+    Default: "gs-reporting"
+    AllowedPattern: "^[a-z0-9-]+$"
+
+  AmazonQuickSightPrincipalArn:
+    Type: String
+    Description: ARN for Amazon QuickSight Principal user.
+
+  ApplicationTag:
+    Type: String
+    Description: Tag value for the tag that is added to the created resources. Tag key will be 'application'.
+    Default: 'gs-contact-reporting'
+    AllowedPattern: "^[a-z0-9-]+$"
+
+Resources:
+
+###########################################################################
+# Athena view creation
+###########################################################################
+  GSDashboardWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: "GSDashboardWorkGroup"
+      State: "ENABLED"
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        ResultConfiguration:
+          OutputLocation:
+            !Join
+            - ""
+            - - "s3://"
+              - Fn::ImportValue: !Sub "${GsContactPart1StackName}-athena-query-results-cid-bucket"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  LambdaCreateAthenaView:
+    DependsOn: GSDashboardWorkGroup
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        !Sub
+        - arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaFunctionName}
+        - { LambdaFunctionName: !Ref CreateAthenaViewLambda }
+
+  CreateAthenaViewLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: GSDashboardWorkGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: Function is not required in a VPC; deploying outside a VPC simplifies deployment
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      ReservedConcurrentExecutions: 10
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      MemorySize: 128
+      Timeout: 120
+      Role: !GetAtt CreateAthenaViewLambdaRole.Arn
+      Environment:
+        Variables:
+          CURtable: !Ref CURtable
+          GStable: !Ref GStable
+          S3BucketAthena:
+            Fn::ImportValue: !Sub "${GsContactPart1StackName}-athena-query-results-cid-bucket"
+      Code:
+        ZipFile:
+          |
+          import time
+          import boto3
+          import os
+          import cfnresponse
+
+          CURtable = os.environ['CURtable']
+          GStable = os.environ['GStable']
+
+          S3BucketAthena = os.environ['S3BucketAthena']
+          S3location = 's3://' + S3BucketAthena
+
+
+          retries = 10
+
+          def lambda_handler(event, context):
+
+            if event['RequestType'] == 'Delete':
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
+            else:
+              query = "CREATE OR REPLACE VIEW gsdashboardview AS (SELECT gs.*, dc.* \
+              FROM gsdashboard.%s gs LEFT JOIN (SELECT *, SPLIT(line_item_resource_id, '/')[2] AS curcontactid \
+              FROM gsdashboard.%s WHERE product_product_name = 'AWS Ground Station') dc \
+              ON dc.curcontactid = gs.contactid);" % (GStable, CURtable)
+
+              client = boto3.client('athena')
+
+              response = client.start_query_execution(
+                  QueryString=query,
+                  QueryExecutionContext={
+                      'Database': 'gsdashboard'
+                  },
+                  WorkGroup = 'GSDashboardWorkGroup',
+                  ResultConfiguration={
+                      'OutputLocation': S3location
+                  }
+              )
+
+              query_exec_id = response['QueryExecutionId']
+
+
+              i=1
+              query_exec_status = ""
+              while query_exec_status != 'SUCCEEDED' and query_exec_status != 'FAILED' and i <= retries:
+
+                  query_status = client.get_query_execution(QueryExecutionId=query_exec_id)
+                  query_exec_status = query_status['QueryExecution']['Status']['State']
+
+                  if query_exec_status == 'SUCCEEDED':
+                      print("STATUS:" + query_exec_status)
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
+                  elif query_exec_status == 'FAILED':
+                      print("STATUS:" + query_exec_status)
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {})
+
+                  elif i > retries:
+                      client.stop_query_execution(QueryExecutionId=query_exec_id)
+                      print('TIME OUT')
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {})
+
+                  else:
+                      print("STATUS:" + query_exec_status)
+                      time.sleep(i)
+                      i+=1
+
+            return
+
+  CreateAthenaViewLambdaRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - glue:CreateTable
+              - glue:GetTable
+              - glue:UpdateTable
+            Resource:
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/gsdashboard"
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/gsdashboard/${CURtable}"
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/gsdashboard/${GStable}"
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/gsdashboard/gsdashboardview"
+          - Effect: Allow
+            Action:
+                - "athena:StartQueryExecution"
+                - "athena:StopQueryExecution"
+                - "athena:GetQueryExecution"
+            Resource:
+                - !Sub "arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/GSDashboardWorkGroup"
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource:
+              - !Join
+                - ""
+                - - "arn:aws:s3:::"
+                  - Fn::ImportValue: !Sub "${GsContactPart1StackName}-athena-query-results-cid-bucket"
+                  - "/*"
+              - !Join
+                - ""
+                - - "arn:aws:s3:::"
+                  - Fn::ImportValue: !Sub "${GsContactPart1StackName}-athena-query-results-cid-bucket"
+
+
+  CreateAthenaViewLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      Path: '/'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Ref CreateAthenaViewLambdaRolePolicy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action:
+            - sts:AssumeRole
+
+###########################################################################
+# Quicksight dashboard creation
+###########################################################################
+
+  GSDashboardQSDataSource:
+    Type: AWS::QuickSight::DataSource
+    DependsOn: CreateAthenaViewLambda
+    Properties:
+      AwsAccountId: !Sub "${AWS::AccountId}"
+      Type: "ATHENA"
+      DataSourceId: "GSDashboardQSDataSource"
+      Name: "GSDashboardQSDataSource"
+      DataSourceParameters:
+        AthenaParameters:
+          WorkGroup: "GSDashboardWorkGroup"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  GSDashboardQSDataSet:
+    Type: AWS::QuickSight::DataSet
+    DependsOn: GSDashboardQSDataSource
+    Properties:
+      Name: "GSDashboardQSDataset"
+      AwsAccountId: !Sub "${AWS::AccountId}"
+      Permissions:
+        - Actions:
+            - "quicksight:ListIngestions"
+            - "quicksight:DeleteDataSet"
+            - "quicksight:UpdateDataSetPermissions"
+            - "quicksight:CancelIngestion"
+            - "quicksight:DescribeDataSetPermissions"
+            - "quicksight:UpdateDataSet"
+            - "quicksight:DescribeDataSet"
+            - "quicksight:PassDataSet"
+            - "quicksight:DescribeIngestion"
+            - "quicksight:CreateIngestion"
+          Principal: !Sub "${AmazonQuickSightPrincipalArn}"
+      ImportMode: "DIRECT_QUERY"
+      DataSetId: "GSDashboardQSDataSet"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      PhysicalTableMap:
+        GSDashboardPhysicalTableMap:
+          RelationalTable:
+            Catalog: "AwsDataCatalog"
+            Schema: "gsdashboard"
+            Name: "gsdashboardview"
+            DataSourceArn: !GetAtt
+              - GSDashboardQSDataSource
+              - Arn
+            InputColumns:
+              - Name: "contactid"
+                Type: "STRING"
+              - Name: "contactstatus"
+                Type: "STRING"
+              - Name: "endtime"
+                Type: "DATETIME"
+              - Name: "groundstation"
+                Type: "STRING"
+              - Name: "maximumelevation"
+                Type: "STRING"
+              - Name: "missionprofilearn"
+                Type: "STRING"
+              - Name: "postpassendtime"
+                Type: "DATETIME"
+              - Name: "prepassstarttime"
+                Type: "DATETIME"
+              - Name: "region"
+                Type: "STRING"
+              - Name: "satellitearn"
+                Type: "STRING"
+              - Name: "starttime"
+                Type: "DATETIME"
+              - Name: "tags"
+                Type: "STRING"
+              - Name: "partition_0"
+                Type: "STRING"
+              - Name: "partition_1"
+                Type: "STRING"
+              - Name: "partition_2"
+                Type: "STRING"
+              - Name: "identity_line_item_id"
+                Type: "STRING"
+              - Name: "identity_time_interval"
+                Type: "STRING"
+              - Name: "bill_invoice_id"
+                Type: "STRING"
+              - Name: "bill_invoicing_entity"
+                Type: "STRING"
+              - Name: "bill_billing_entity"
+                Type: "STRING"
+              - Name: "bill_bill_type"
+                Type: "STRING"
+              - Name: "bill_payer_account_id"
+                Type: "STRING"
+              - Name: "bill_billing_period_start_date"
+                Type: "DATETIME"
+              - Name: "bill_billing_period_end_date"
+                Type: "DATETIME"
+              - Name: "line_item_usage_account_id"
+                Type: "STRING"
+              - Name: "line_item_line_item_type"
+                Type: "STRING"
+              - Name: "line_item_usage_start_date"
+                Type: "DATETIME"
+              - Name: "line_item_usage_end_date"
+                Type: "DATETIME"
+              - Name: "line_item_product_code"
+                Type: "STRING"
+              - Name: "line_item_usage_type"
+                Type: "STRING"
+              - Name: "line_item_operation"
+                Type: "STRING"
+              - Name: "line_item_availability_zone"
+                Type: "STRING"
+              - Name: "line_item_resource_id"
+                Type: "STRING"
+              - Name: "line_item_usage_amount"
+                Type: "DECIMAL"
+              - Name: "line_item_normalization_factor"
+                Type: "DECIMAL"
+              - Name: "line_item_normalized_usage_amount"
+                Type: "DECIMAL"
+              - Name: "line_item_currency_code"
+                Type: "STRING"
+              - Name: "line_item_unblended_rate"
+                Type: "STRING"
+              - Name: "line_item_unblended_cost"
+                Type: "DECIMAL"
+              - Name: "line_item_blended_rate"
+                Type: "STRING"
+              - Name: "line_item_blended_cost"
+                Type: "DECIMAL"
+              - Name: "line_item_line_item_description"
+                Type: "STRING"
+              - Name: "line_item_tax_type"
+                Type: "STRING"
+              - Name: "line_item_legal_entity"
+                Type: "STRING"
+              - Name: "product_product_name"
+                Type: "STRING"
+              - Name: "product_abd_instance_class"
+                Type: "STRING"
+              - Name: "product_alarm_type"
+                Type: "STRING"
+              - Name: "product_attachment_type"
+                Type: "STRING"
+              - Name: "product_availability"
+                Type: "STRING"
+              - Name: "product_availability_zone"
+                Type: "STRING"
+              - Name: "product_bandwidth"
+                Type: "STRING"
+              - Name: "product_capacitystatus"
+                Type: "STRING"
+              - Name: "product_category"
+                Type: "STRING"
+              - Name: "product_ci_type"
+                Type: "STRING"
+              - Name: "product_classicnetworkingsupport"
+                Type: "STRING"
+              - Name: "product_clock_speed"
+                Type: "STRING"
+              - Name: "product_counts_against_quota"
+                Type: "STRING"
+              - Name: "product_current_generation"
+                Type: "STRING"
+              - Name: "product_data_transfer_quota"
+                Type: "STRING"
+              - Name: "product_data_type"
+                Type: "STRING"
+              - Name: "product_database_engine"
+                Type: "STRING"
+              - Name: "product_dedicated_ebs_throughput"
+                Type: "STRING"
+              - Name: "product_deployment_option"
+                Type: "STRING"
+              - Name: "product_describes"
+                Type: "STRING"
+              - Name: "product_description"
+                Type: "STRING"
+              - Name: "product_durability"
+                Type: "STRING"
+              - Name: "product_ecu"
+                Type: "STRING"
+              - Name: "product_edition"
+                Type: "STRING"
+              - Name: "product_endpoint_type"
+                Type: "STRING"
+              - Name: "product_engine_code"
+                Type: "STRING"
+              - Name: "product_enhanced_networking_supported"
+                Type: "STRING"
+              - Name: "product_event_type"
+                Type: "STRING"
+              - Name: "product_fee_code"
+                Type: "STRING"
+              - Name: "product_fee_description"
+                Type: "STRING"
+              - Name: "product_finding_group"
+                Type: "STRING"
+              - Name: "product_finding_source"
+                Type: "STRING"
+              - Name: "product_finding_storage"
+                Type: "STRING"
+              - Name: "product_free_overage"
+                Type: "STRING"
+              - Name: "product_free_query_types"
+                Type: "STRING"
+              - Name: "product_free_usage_included"
+                Type: "STRING"
+              - Name: "product_from_location"
+                Type: "STRING"
+              - Name: "product_from_location_type"
+                Type: "STRING"
+              - Name: "product_from_region_code"
+                Type: "STRING"
+              - Name: "product_gets"
+                Type: "STRING"
+              - Name: "product_gpu_memory"
+                Type: "STRING"
+              - Name: "product_groundstation"
+                Type: "STRING"
+              - Name: "product_group"
+                Type: "STRING"
+              - Name: "product_group_description"
+                Type: "STRING"
+              - Name: "product_insightstype"
+                Type: "STRING"
+              - Name: "product_instance_family"
+                Type: "STRING"
+              - Name: "product_instance_type"
+                Type: "STRING"
+              - Name: "product_instance_type_family"
+                Type: "STRING"
+              - Name: "product_intel_avx2_available"
+                Type: "STRING"
+              - Name: "product_intel_avx_available"
+                Type: "STRING"
+              - Name: "product_intel_turbo_available"
+                Type: "STRING"
+              - Name: "product_license_model"
+                Type: "STRING"
+              - Name: "product_location"
+                Type: "STRING"
+              - Name: "product_location_type"
+                Type: "STRING"
+              - Name: "product_logorigin"
+                Type: "STRING"
+              - Name: "product_logs_destination"
+                Type: "STRING"
+              - Name: "product_logsource"
+                Type: "STRING"
+              - Name: "product_marketoption"
+                Type: "STRING"
+              - Name: "product_max_iops_burst_performance"
+                Type: "STRING"
+              - Name: "product_max_iopsvolume"
+                Type: "STRING"
+              - Name: "product_max_throughputvolume"
+                Type: "STRING"
+              - Name: "product_max_volume_size"
+                Type: "STRING"
+              - Name: "product_memory"
+                Type: "STRING"
+              - Name: "product_memory_gib"
+                Type: "STRING"
+              - Name: "product_message_delivery_frequency"
+                Type: "STRING"
+              - Name: "product_message_delivery_order"
+                Type: "STRING"
+              - Name: "product_min_volume_size"
+                Type: "STRING"
+              - Name: "product_network_performance"
+                Type: "STRING"
+              - Name: "product_normalization_size_factor"
+                Type: "STRING"
+              - Name: "product_ondemand"
+                Type: "STRING"
+              - Name: "product_operating_system"
+                Type: "STRING"
+              - Name: "product_operation"
+                Type: "STRING"
+              - Name: "product_ops_items"
+                Type: "STRING"
+              - Name: "product_overage_type"
+                Type: "STRING"
+              - Name: "product_pack_size"
+                Type: "STRING"
+              - Name: "product_paid"
+                Type: "STRING"
+              - Name: "product_physical_processor"
+                Type: "STRING"
+              - Name: "product_platodataanalyzedtype"
+                Type: "STRING"
+              - Name: "product_platopricingtype"
+                Type: "STRING"
+              - Name: "product_platostoragetype"
+                Type: "STRING"
+              - Name: "product_platousagetype"
+                Type: "STRING"
+              - Name: "product_platovolumetype"
+                Type: "STRING"
+              - Name: "product_pre_installed_sw"
+                Type: "STRING"
+              - Name: "product_processor_architecture"
+                Type: "STRING"
+              - Name: "product_processor_features"
+                Type: "STRING"
+              - Name: "product_product_family"
+                Type: "STRING"
+              - Name: "product_q_present"
+                Type: "STRING"
+              - Name: "product_queue_type"
+                Type: "STRING"
+              - Name: "product_region"
+                Type: "STRING"
+              - Name: "product_region_code"
+                Type: "STRING"
+              - Name: "product_request_description"
+                Type: "STRING"
+              - Name: "product_request_type"
+                Type: "STRING"
+              - Name: "product_scan_type"
+                Type: "STRING"
+              - Name: "product_servicecode"
+                Type: "STRING"
+              - Name: "product_servicename"
+                Type: "STRING"
+              - Name: "product_sku"
+                Type: "STRING"
+              - Name: "product_standard_group"
+                Type: "STRING"
+              - Name: "product_standard_storage"
+                Type: "STRING"
+              - Name: "product_steps"
+                Type: "STRING"
+              - Name: "product_storage"
+                Type: "STRING"
+              - Name: "product_storage_class"
+                Type: "STRING"
+              - Name: "product_storage_media"
+                Type: "STRING"
+              - Name: "product_storage_type"
+                Type: "STRING"
+              - Name: "product_subscription_type"
+                Type: "STRING"
+              - Name: "product_tenancy"
+                Type: "STRING"
+              - Name: "product_tickettype"
+                Type: "STRING"
+              - Name: "product_tier"
+                Type: "STRING"
+              - Name: "product_to_location"
+                Type: "STRING"
+              - Name: "product_to_location_type"
+                Type: "STRING"
+              - Name: "product_to_region_code"
+                Type: "STRING"
+              - Name: "product_transfer_type"
+                Type: "STRING"
+              - Name: "product_updates"
+                Type: "STRING"
+              - Name: "product_usage_group"
+                Type: "STRING"
+              - Name: "product_usage_volume"
+                Type: "STRING"
+              - Name: "product_usagetype"
+                Type: "STRING"
+              - Name: "product_vcpu"
+                Type: "STRING"
+              - Name: "product_version"
+                Type: "STRING"
+              - Name: "product_volume_api_name"
+                Type: "STRING"
+              - Name: "product_volume_type"
+                Type: "STRING"
+              - Name: "product_vpcnetworkingsupport"
+                Type: "STRING"
+              - Name: "pricing_rate_code"
+                Type: "STRING"
+              - Name: "pricing_rate_id"
+                Type: "STRING"
+              - Name: "pricing_currency"
+                Type: "STRING"
+              - Name: "pricing_public_on_demand_cost"
+                Type: "DECIMAL"
+              - Name: "pricing_public_on_demand_rate"
+                Type: "STRING"
+              - Name: "pricing_term"
+                Type: "STRING"
+              - Name: "pricing_unit"
+                Type: "STRING"
+              - Name: "reservation_amortized_upfront_cost_for_usage"
+                Type: "DECIMAL"
+              - Name: "reservation_amortized_upfront_fee_for_billing_period"
+                Type: "DECIMAL"
+              - Name: "reservation_effective_cost"
+                Type: "DECIMAL"
+              - Name: "reservation_end_time"
+                Type: "STRING"
+              - Name: "reservation_modification_status"
+                Type: "STRING"
+              - Name: "reservation_normalized_units_per_reservation"
+                Type: "STRING"
+              - Name: "reservation_number_of_reservations"
+                Type: "STRING"
+              - Name: "reservation_recurring_fee_for_usage"
+                Type: "DECIMAL"
+              - Name: "reservation_start_time"
+                Type: "STRING"
+              - Name: "reservation_subscription_id"
+                Type: "STRING"
+              - Name: "reservation_total_reserved_normalized_units"
+                Type: "STRING"
+              - Name: "reservation_total_reserved_units"
+                Type: "STRING"
+              - Name: "reservation_units_per_reservation"
+                Type: "STRING"
+              - Name: "reservation_unused_amortized_upfront_fee_for_billing_period"
+                Type: "DECIMAL"
+              - Name: "reservation_unused_normalized_unit_quantity"
+                Type: "DECIMAL"
+              - Name: "reservation_unused_quantity"
+                Type: "DECIMAL"
+              - Name: "reservation_unused_recurring_fee"
+                Type: "DECIMAL"
+              - Name: "reservation_upfront_value"
+                Type: "DECIMAL"
+              - Name: "savings_plan_total_commitment_to_date"
+                Type: "DECIMAL"
+              - Name: "savings_plan_savings_plan_a_r_n"
+                Type: "STRING"
+              - Name: "savings_plan_savings_plan_rate"
+                Type: "DECIMAL"
+              - Name: "savings_plan_used_commitment"
+                Type: "DECIMAL"
+              - Name: "savings_plan_savings_plan_effective_cost"
+                Type: "DECIMAL"
+              - Name: "savings_plan_amortized_upfront_commitment_for_billing_period"
+                Type: "DECIMAL"
+              - Name: "savings_plan_recurring_commitment_for_billing_period"
+                Type: "DECIMAL"
+              - Name: "product_gpu"
+                Type: "STRING"
+              - Name: "year"
+                Type: "STRING"
+              - Name: "month"
+                Type: "STRING"
+              - Name: "curcontactid"
+                Type: "STRING"
+      LogicalTableMap:
+        GSDashboardLogicalTableMap:
+          Alias: "gsdashboardview"
+          DataTransforms:
+          - TagColumnOperation:
+              ColumnName: region
+              Tags:
+               - ColumnGeographicRole: STATE
+          - TagColumnOperation:
+              ColumnName: product_from_region_code
+              Tags:
+               - ColumnGeographicRole: STATE
+          - TagColumnOperation:
+              ColumnName: product_region
+              Tags:
+               - ColumnGeographicRole: STATE
+          - TagColumnOperation:
+              ColumnName: product_region_code
+              Tags:
+               - ColumnGeographicRole: STATE
+          - TagColumnOperation:
+              ColumnName: product_to_region_code
+              Tags:
+               - ColumnGeographicRole: STATE
+          Source:
+            PhysicalTableId: "GSDashboardPhysicalTableMap"
+            
+  GSDashboard:
+    Type: AWS::QuickSight::Dashboard
+    DependsOn: GSDashboardQSDataSet
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      Name: "GSDashboard"
+      DashboardId: "GSDashboard"
+      AwsAccountId: !Sub "${AWS::AccountId}"
+      Permissions:
+        - Actions:
+            - "quicksight:DescribeDashboard"
+            - "quicksight:ListDashboardVersions"
+            - "quicksight:UpdateDashboardPermissions"
+            - "quicksight:QueryDashboard"
+            - "quicksight:UpdateDashboard"
+            - "quicksight:DeleteDashboard"
+            - "quicksight:DescribeDashboardPermissions"
+            - "quicksight:UpdateDashboardPublishedVersion"
+          Principal: !Sub "${AmazonQuickSightPrincipalArn}"
+      SourceEntity:
+        SourceTemplate:
+          Arn: "arn:aws:quicksight:us-east-2:421660149373:template/gsdashboard/version/5"
+          DataSetReferences:
+            - DataSetArn: !GetAtt
+                - GSDashboardQSDataSet
+                - Arn
+              DataSetPlaceholder: "dataset1"
