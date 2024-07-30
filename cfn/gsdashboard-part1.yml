@@ -931,6 +931,7 @@ Resources:
     DependsOn:
       - AWSGSDashboardDatabase
       - AWSCURCrawlerRole
+      - CURBucket
     Properties:
       Name: AWSCURCrawler
       Description: A recurring crawler that keeps your CUR table in Athena up-to-date.
@@ -963,6 +964,7 @@ Resources:
     DependsOn:
       - AWSGSDashboardDatabase
       - AWSGSCrawlerRole
+      - GSContactsInformationBucket
     Properties:
       Name: AWSGSCrawler
       Description: A recurring crawler that keeps your GS table in Athena up-to-date.
