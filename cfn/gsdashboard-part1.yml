@@ -575,6 +575,15 @@ Resources:
 
               try:
                 contacts = groundstationMain.list_contacts(endTime=datetime.fromisoformat(enddatestr),startTime=datetime.fromisoformat(startdatestr),statusList=['AWS_CANCELLED','AWS_FAILED','CANCELLED','CANCELLING','COMPLETED','FAILED','FAILED_TO_SCHEDULE','PASS','POSTPASS','PREPASS','SCHEDULED','SCHEDULING'])
+                # get all data using pagination
+                while 'nextToken' in contacts:
+                  contacts2 = groundstationMain.list_contacts(endTime=datetime.fromisoformat(enddatestr), startTime=datetime.fromisoformat(startdatestr), statusList=['AWS_CANCELLED', 'AWS_FAILED', 'CANCELLED', 'CANCELLING', 'COMPLETED', 'FAILED', 'FAILED_TO_SCHEDULE', 'PASS', 'POSTPASS', 'PREPASS', 'SCHEDULED', 'SCHEDULING'], nextToken=contacts['nextToken'])
+                  contacts['contactList'].extend(contacts2['contactList'])
+                  if 'nextToken' in contacts2:
+                    contacts['nextToken'] = contacts2['nextToken']
+                  else:
+                    break
+
               except Exception as err:
                 logger.error("Error running GS list-contacts: %s: %s", err.response['Error']['Code'], err.response['Error']['Message'])
                 try:
@@ -922,6 +931,7 @@ Resources:
     DependsOn:
       - AWSGSDashboardDatabase
       - AWSCURCrawlerRole
+      - CURBucket
     Properties:
       Name: AWSCURCrawler
       Description: A recurring crawler that keeps your CUR table in Athena up-to-date.
@@ -954,6 +964,7 @@ Resources:
     DependsOn:
       - AWSGSDashboardDatabase
       - AWSGSCrawlerRole
+      - GSContactsInformationBucket
     Properties:
       Name: AWSGSCrawler
       Description: A recurring crawler that keeps your GS table in Athena up-to-date.
