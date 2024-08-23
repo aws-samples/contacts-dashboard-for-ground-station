@@ -125,7 +125,7 @@ Resources:
             else:
               query = "CREATE OR REPLACE VIEW gsdashboardview AS (SELECT gs.*, dc.* \
               FROM gsdashboard.%s gs LEFT JOIN (SELECT *, SPLIT(line_item_resource_id, '/')[2] AS curcontactid \
-              FROM gsdashboard.%s WHERE product_product_name = 'AWS Ground Station') dc \
+              FROM gsdashboard.%s WHERE product_product_name = 'AWS Ground Station' AND lower(line_item_operation) = 'contact') dc \
               ON dc.curcontactid = gs.contactid);" % (GStable, CURtable)
 
               client = boto3.client('athena')
