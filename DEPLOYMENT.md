@@ -216,7 +216,7 @@ If you wish to backfill your Cost and Usage Report with past data, please follow
         ```bash
         CREATE OR REPLACE VIEW gsdashboardview AS (SELECT gs.*, dc.* 
         FROM gsdashboard.GS_CONTACTS_TABLE_NAME gs LEFT JOIN (SELECT *, SPLIT(line_item_resource_id, '/')[2] AS curcontactid 
-        FROM gsdashboard.CUR_TABLE_NAME WHERE product_product_name = 'AWS Ground Station') dc 
+        FROM gsdashboard.CUR_TABLE_NAME WHERE product_product_name = 'AWS Ground Station' AND lower(line_item_operation) = 'contact') dc 
         ON dc.curcontactid = gs.contactid)
         ```
 
