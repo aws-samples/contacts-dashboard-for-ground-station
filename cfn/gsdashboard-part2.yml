@@ -233,6 +233,125 @@ Resources:
             - sts:AssumeRole
 
 ###########################################################################
+# Athena view re-creation
+###########################################################################
+  RecreateAthenaViewLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: GSDashboardWorkGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: Function is not required in a VPC; deploying outside a VPC simplifies deployment
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      ReservedConcurrentExecutions: 10
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      MemorySize: 128
+      Timeout: 120
+      Role: !GetAtt CreateAthenaViewLambdaRole.Arn
+      Environment:
+        Variables:
+          CURtable: !Ref CURtable
+          GStable: !Ref GStable
+          S3BucketAthena:
+            Fn::ImportValue: !Sub "${GsContactPart1StackName}-athena-query-results-cid-bucket"
+      Code:
+        ZipFile:
+          |
+          import time
+          import boto3
+          import os
+
+          CURtable = os.environ['CURtable']
+          GStable = os.environ['GStable']
+
+          S3BucketAthena = os.environ['S3BucketAthena']
+          S3location = 's3://' + S3BucketAthena
+
+
+          retries = 10
+
+          def lambda_handler(event, context):
+
+            query = "CREATE OR REPLACE VIEW gsdashboardview AS (SELECT gs.*, dc.* \
+            FROM gsdashboard.%s gs LEFT JOIN (SELECT *, SPLIT(line_item_resource_id, '/')[2] AS curcontactid \
+            FROM gsdashboard.%s WHERE product_product_name = 'AWS Ground Station' AND lower(line_item_operation) = 'contact') dc \
+            ON dc.curcontactid = gs.contactid);" % (GStable, CURtable)
+
+            client = boto3.client('athena')
+
+            response = client.start_query_execution(
+              QueryString=query,
+              QueryExecutionContext={
+                  'Database': 'gsdashboard'
+              },
+              WorkGroup = 'GSDashboardWorkGroup',
+              ResultConfiguration={
+                  'OutputLocation': S3location
+              }
+            )
+
+            query_exec_id = response['QueryExecutionId']
+
+
+            i=1
+            query_exec_status = ""
+            while query_exec_status != 'SUCCEEDED' and query_exec_status != 'FAILED' and i <= retries:
+
+              query_status = client.get_query_execution(QueryExecutionId=query_exec_id)
+              query_exec_status = query_status['QueryExecution']['Status']['State']
+
+              if query_exec_status == 'SUCCEEDED':
+                print("STATUS:" + query_exec_status)
+
+              elif query_exec_status == 'FAILED':
+                print("STATUS:" + query_exec_status)
+
+              elif i > retries:
+                client.stop_query_execution(QueryExecutionId=query_exec_id)
+                print('TIME OUT')
+
+              else:
+                print("STATUS:" + query_exec_status)
+                time.sleep(i)
+                i+=1
+
+            return
+
+  AthenaViewEventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "This rule watches for failed Athena queries in a particular workgroup with a VIEW_IS_STALE error."
+      EventPattern:
+        source:
+          - "aws.athena"
+        detail-type:
+          - "Athena Query State Change"
+        detail:
+          currentState:
+            - "FAILED"
+          workgroupName:
+            - "GSDashboardWorkGroup"
+          athenaError:
+            errorMessage:
+            - prefix: VIEW_IS_STALE
+      Targets:
+        - Arn: !GetAtt RecreateAthenaViewLambda.Arn
+          Id: "RecreateAthenaViewLambdaHandler"
+
+  PermissionForEventBridgeToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RecreateAthenaViewLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt AthenaViewEventBridgeRule.Arn
+
+###########################################################################
 # Quicksight dashboard creation
 ###########################################################################
 
