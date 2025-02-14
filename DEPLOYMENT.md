@@ -198,7 +198,7 @@ This will return a list of users and their `Arn`. The Quicksight Principal Arn i
 - Click the user icon on the top right, change the region to North Virginia
 - Click the user icon on the top right, click Manage Quicksight
 - Click Manage Users
-- Obtain the user name of the primciple user
+- Obtain the user name of the main admin user
 - Format the Quicksight Principal Arn string using the format and example below
 
 arn:aws:quicksight:us-east-1:AWS-ACCOUNT-ID:user/default/QUICKSIGHT-USERNAME
