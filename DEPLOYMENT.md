@@ -179,7 +179,34 @@ Please follow the configuration steps in section [4.1.1](./DEPLOYMENT.md#411-qui
 
 7. Give the stack a name, for instance, *gsdashboard-part2*.
 
-8. Obtain your Quicksight Principal user Arn following [these instructions](https://docs.aws.amazon.com/solutions/latest/devops-monitoring-dashboard-on-aws/step-1.html).
+8. Obtain your Quicksight Principal user Arn using the AWS CLI or AWS Console following the instructions below
+
+
+**Obtaining the Quicksight Principle Arn using the AWS Command Line Interface (CLI):**
+
+Run the command below, replacing the --aws-account-id parameter with your AWS Account Id.
+
+```bash
+aws quicksight list-users --aws-account-id 123456789012 --namespace default --region us-east-1
+```
+
+This will return a list of users and their `Arn`. The Quicksight Principle Arn is the Arn of the admin user created earlier which uses the format `arn:aws:quicksight:us-east-1:AWS-ACCOUNT-ID:user/default/QUICKSIGHT-USERNAME`
+
+**Obtaining the Quicksight Principle Arn using the AWS Console:**
+
+- Open the Quicksight console
+- Click the user icon on the top right, change the region to North Virginia
+- Click the user icon on the top right, click Manage Quicksight
+- Click Manage Users
+- Obtain the user name of the primciple user
+- Format the Quicksight Principle Arn string using the format and example below
+
+arn:aws:quicksight:us-east-1:AWS-ACCOUNT-ID:user/default/QUICKSIGHT-USERNAME
+
+E.G.
+
+arn:aws:quicksight:us-east-1:123456789012:user/default/admin/doe-john
+
 
 9. Provide values for all parameters:
     * **AmazonQuicksightPrincipalArn**: Arn for Quicksight Principal user. 
