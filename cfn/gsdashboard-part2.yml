@@ -852,11 +852,606 @@ Resources:
             - "quicksight:DescribeDashboardPermissions"
             - "quicksight:UpdateDashboardPublishedVersion"
           Principal: !Sub "${AmazonQuickSightPrincipalArn}"
-      SourceEntity:
-        SourceTemplate:
-          Arn: "arn:aws:quicksight:us-east-2:421660149373:template/gsdashboard/version/5"
-          DataSetReferences:
-            - DataSetArn: !GetAtt
-                - GSDashboardQSDataSet
-                - Arn
-              DataSetPlaceholder: "dataset1"
+      DashboardPublishOptions:
+        AdHocFilteringOption:
+          AvailabilityStatus: DISABLED
+        ExportToCSVOption:
+          AvailabilityStatus: ENABLED
+        SheetControlsOption:
+          VisibilityState: COLLAPSED
+        SheetLayoutElementMaximizationOption:
+          AvailabilityStatus: ENABLED
+        VisualMenuOption:
+          AvailabilityStatus: ENABLED
+        VisualAxisSortOption:
+          AvailabilityStatus: ENABLED
+        ExportWithHiddenFieldsOption:
+          AvailabilityStatus: DISABLED
+        DataPointDrillUpDownOption:
+          AvailabilityStatus: ENABLED
+        DataPointMenuLabelOption:
+          AvailabilityStatus: ENABLED
+        DataPointTooltipOption:
+          AvailabilityStatus: ENABLED
+      ValidationStrategy:
+        Mode: LENIENT
+      Definition:
+        DataSetIdentifierDeclarations:
+          - Identifier: "gsdashboardview"
+            DataSetArn: !GetAtt GSDashboardQSDataSet.Arn
+
+        AnalysisDefaults:
+          DefaultNewSheetConfiguration:
+            InteractiveLayoutConfiguration:
+              Grid:
+                CanvasSizeOptions:
+                  ScreenCanvasSizeOptions:
+                    ResizeOption: FIXED
+                    OptimizedViewPortWidth: "1600px"
+            SheetContentType: INTERACTIVE
+        FilterGroups:
+          - FilterGroupId: fg-contactid
+            Filters:
+              - CategoryFilter:
+                  FilterId: filter-contactid
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: contactid
+                  Configuration:
+                    FilterListConfiguration:
+                      MatchOperator: CONTAINS
+                      SelectAllOptions: FILTER_ALL_VALUES
+                      NullOption: NON_NULLS_ONLY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-groundstation
+            Filters:
+              - CategoryFilter:
+                  FilterId: filter-groundstation
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: groundstation
+                  Configuration:
+                    FilterListConfiguration:
+                      MatchOperator: CONTAINS
+                      SelectAllOptions: FILTER_ALL_VALUES
+                      NullOption: NON_NULLS_ONLY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-contactstatus
+            Filters:
+              - CategoryFilter:
+                  FilterId: filter-contactstatus
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: contactstatus
+                  Configuration:
+                    FilterListConfiguration:
+                      MatchOperator: CONTAINS
+                      SelectAllOptions: FILTER_ALL_VALUES
+                      NullOption: NON_NULLS_ONLY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-satellitearn
+            Filters:
+              - CategoryFilter:
+                  FilterId: filter-satellitearn
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: satellitearn
+                  Configuration:
+                    FilterListConfiguration:
+                      MatchOperator: CONTAINS
+                      SelectAllOptions: FILTER_ALL_VALUES
+                      NullOption: NON_NULLS_ONLY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-missionprofilearn
+            Filters:
+              - CategoryFilter:
+                  FilterId: filter-missionprofilearn
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: missionprofilearn
+                  Configuration:
+                    FilterListConfiguration:
+                      MatchOperator: CONTAINS
+                      SelectAllOptions: FILTER_ALL_VALUES
+                      NullOption: NON_NULLS_ONLY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-starttime
+            Filters:
+              - TimeRangeFilter:
+                  FilterId: filter-starttime
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: starttime
+                  NullOption: NON_NULLS_ONLY
+                  TimeGranularity: DAY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-endtime
+            Filters:
+              - TimeRangeFilter:
+                  FilterId: filter-endtime
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: endtime
+                  NullOption: NON_NULLS_ONLY
+                  TimeGranularity: DAY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-curcontactid
+            Filters:
+              - CategoryFilter:
+                  FilterId: filter-curcontactid
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: curcontactid
+                  Configuration:
+                    FilterListConfiguration:
+                      MatchOperator: CONTAINS
+                      SelectAllOptions: FILTER_ALL_VALUES
+                      NullOption: NON_NULLS_ONLY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-tags
+            Filters:
+              - CategoryFilter:
+                  FilterId: filter-tags
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: tags
+                  Configuration:
+                    FilterListConfiguration:
+                      MatchOperator: CONTAINS
+                      SelectAllOptions: FILTER_ALL_VALUES
+                      NullOption: NON_NULLS_ONLY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+          - FilterGroupId: fg-region
+            Filters:
+              - CategoryFilter:
+                  FilterId: filter-region
+                  Column:
+                    DataSetIdentifier: gsdashboardview
+                    ColumnName: region
+                  Configuration:
+                    FilterListConfiguration:
+                      MatchOperator: CONTAINS
+                      SelectAllOptions: FILTER_ALL_VALUES
+                      NullOption: NON_NULLS_ONLY
+            ScopeConfiguration:
+              SelectedSheets:
+                SheetVisualScopingConfigurations:
+                  - SheetId: ContactsOverview
+                    Scope: SELECTED_VISUALS
+                    VisualIds:
+                      - ContactsTable
+            Status: ENABLED
+            CrossDataset: SINGLE_DATASET
+
+        Sheets:
+          - SheetId: ContactsOverview
+            Name: "Contacts Overview"
+            ContentType: INTERACTIVE
+            FilterControls:
+              - DateTimePicker:
+                  FilterControlId: fc-starttime
+                  Title: "starttime between"
+                  SourceFilterId: filter-starttime
+                  Type: DATE_RANGE
+              - DateTimePicker:
+                  FilterControlId: fc-endtime
+                  Title: "endtime between"
+                  SourceFilterId: filter-endtime
+                  Type: DATE_RANGE
+              - Dropdown:
+                  FilterControlId: fc-contactid
+                  Title: "contactid equals"
+                  SourceFilterId: filter-contactid
+                  DisplayOptions:
+                    SelectAllOptions:
+                      Visibility: VISIBLE
+                  Type: MULTI_SELECT
+              - Dropdown:
+                  FilterControlId: fc-groundstation
+                  Title: "groundstation equals"
+                  SourceFilterId: filter-groundstation
+                  DisplayOptions:
+                    SelectAllOptions:
+                      Visibility: VISIBLE
+                  Type: MULTI_SELECT
+              - Dropdown:
+                  FilterControlId: fc-contactstatus
+                  Title: "contactstatus equals"
+                  SourceFilterId: filter-contactstatus
+                  DisplayOptions:
+                    SelectAllOptions:
+                      Visibility: VISIBLE
+                  Type: MULTI_SELECT
+              - Dropdown:
+                  FilterControlId: fc-satellitearn
+                  Title: "satellitearn equals"
+                  SourceFilterId: filter-satellitearn
+                  DisplayOptions:
+                    SelectAllOptions:
+                      Visibility: VISIBLE
+                  Type: MULTI_SELECT
+              - Dropdown:
+                  FilterControlId: fc-missionprofilearn
+                  Title: "missionprofilearn equals"
+                  SourceFilterId: filter-missionprofilearn
+                  DisplayOptions:
+                    SelectAllOptions:
+                      Visibility: VISIBLE
+                  Type: MULTI_SELECT
+              - Dropdown:
+                  FilterControlId: fc-curcontactid
+                  Title: "curcontactid equals"
+                  SourceFilterId: filter-curcontactid
+                  DisplayOptions:
+                    SelectAllOptions:
+                      Visibility: VISIBLE
+                  Type: MULTI_SELECT
+              - Dropdown:
+                  FilterControlId: fc-tags
+                  Title: "tags equals"
+                  SourceFilterId: filter-tags
+                  DisplayOptions:
+                    SelectAllOptions:
+                      Visibility: VISIBLE
+                  Type: MULTI_SELECT
+              - Dropdown:
+                  FilterControlId: fc-region
+                  Title: "region equals"
+                  SourceFilterId: filter-region
+                  DisplayOptions:
+                    SelectAllOptions:
+                      Visibility: VISIBLE
+                  Type: MULTI_SELECT
+            Visuals:
+              - TableVisual:
+                  VisualId: ContactsTable
+                  Title:
+                    Visibility: VISIBLE
+                    FormatText:
+                      RichText: "<visual-title>AWS Ground Station contacts information and mapping to Cost and Usage Report fields</visual-title>"
+                  Subtitle:
+                    Visibility: VISIBLE
+                  ChartConfiguration:
+                    FieldWells:
+                      TableAggregatedFieldWells:
+                        GroupBy:
+                          - CategoricalDimensionField:
+                              FieldId: f-contactid
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: contactid
+                          - CategoricalDimensionField:
+                              FieldId: f-groundstation
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: groundstation
+                          - CategoricalDimensionField:
+                              FieldId: f-contactstatus
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: contactstatus
+                          - CategoricalDimensionField:
+                              FieldId: f-satellitearn
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: satellitearn
+                          - CategoricalDimensionField:
+                              FieldId: f-missionprofilearn
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: missionprofilearn
+                          - DateDimensionField:
+                              FieldId: f-starttime
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: starttime
+                              DateGranularity: SECOND
+                              FormatConfiguration:
+                                DateTimeFormat: "YYYY/MM/DD, hh:mm:ss"
+                                NullValueFormatConfiguration:
+                                  NullString: "null"
+                          - DateDimensionField:
+                              FieldId: f-endtime
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: endtime
+                              DateGranularity: SECOND
+                              FormatConfiguration:
+                                DateTimeFormat: "YYYY/MM/DD, hh:mm:ss"
+                                NullValueFormatConfiguration:
+                                  NullString: "null"
+                          - CategoricalDimensionField:
+                              FieldId: f-curcontactid
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: curcontactid
+                          - CategoricalDimensionField:
+                              FieldId: f-tags
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: tags
+                          - CategoricalDimensionField:
+                              FieldId: f-region
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: region
+                        Values: []
+                    SortConfiguration: {}
+                    TableOptions:
+                      HeaderStyle:
+                        TextWrap: WRAP
+                        Height: 25
+                      CellStyle:
+                        Height: 26
+                    FieldOptions:
+                      SelectedFieldOptions:
+                        - FieldId: f-satellitearn
+                          Width: "353px"
+                        - FieldId: f-missionprofilearn
+                          Width: "199px"
+                        - FieldId: f-starttime
+                          Width: "247px"
+                      Order:
+                        - f-contactid
+                        - f-groundstation
+                        - f-contactstatus
+                        - f-satellitearn
+                        - f-missionprofilearn
+                        - f-starttime
+                        - f-endtime
+                        - f-curcontactid
+                        - f-tags
+                        - f-region
+                  Actions: []
+              - PieChartVisual:
+                  VisualId: StatusPieChart
+                  Title:
+                    Visibility: VISIBLE
+                    FormatText:
+                      RichText: "<visual-title>Count of contacts by contact status</visual-title>"
+                  Subtitle:
+                    Visibility: VISIBLE
+                  ChartConfiguration:
+                    FieldWells:
+                      PieChartAggregatedFieldWells:
+                        Category:
+                          - CategoricalDimensionField:
+                              FieldId: pie-status-cat
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: contactstatus
+                        Values:
+                          - CategoricalMeasureField:
+                              FieldId: pie-status-val
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: contactstatus
+                              AggregationFunction: COUNT
+                    SortConfiguration:
+                      CategorySort:
+                        - FieldSort:
+                            FieldId: pie-status-val
+                            Direction: DESC
+                      CategoryItemsLimit:
+                        OtherCategories: INCLUDE
+                      SmallMultiplesLimitConfiguration:
+                        OtherCategories: INCLUDE
+                    DonutOptions:
+                      ArcOptions:
+                        ArcThickness: WHOLE
+                    DataLabels:
+                      Visibility: VISIBLE
+                      MeasureLabelVisibility: VISIBLE
+                      Overlap: DISABLE_OVERLAP
+                    Tooltip:
+                      TooltipVisibility: VISIBLE
+                      SelectedTooltipType: DETAILED
+                      FieldBasedTooltip:
+                        AggregationVisibility: HIDDEN
+                        TooltipTitleType: PRIMARY_VALUE
+                        TooltipFields:
+                          - FieldTooltipItem:
+                              FieldId: pie-status-val
+                              Visibility: VISIBLE
+                          - FieldTooltipItem:
+                              FieldId: pie-status-cat
+                              Visibility: VISIBLE
+                  Actions: []
+                  ColumnHierarchies: []
+              - PieChartVisual:
+                  VisualId: GroundStationPieChart
+                  Title:
+                    Visibility: VISIBLE
+                    FormatText:
+                      RichText: "<visual-title>Count of contacts by Ground Station</visual-title>"
+                  Subtitle:
+                    Visibility: VISIBLE
+                  ChartConfiguration:
+                    FieldWells:
+                      PieChartAggregatedFieldWells:
+                        Category:
+                          - CategoricalDimensionField:
+                              FieldId: pie-gs-cat
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: groundstation
+                        Values:
+                          - CategoricalMeasureField:
+                              FieldId: pie-gs-val
+                              Column:
+                                DataSetIdentifier: gsdashboardview
+                                ColumnName: groundstation
+                              AggregationFunction: COUNT
+                    SortConfiguration:
+                      CategorySort:
+                        - FieldSort:
+                            FieldId: pie-gs-val
+                            Direction: DESC
+                      CategoryItemsLimit:
+                        OtherCategories: INCLUDE
+                      SmallMultiplesLimitConfiguration:
+                        OtherCategories: INCLUDE
+                    DonutOptions:
+                      ArcOptions:
+                        ArcThickness: WHOLE
+                    DataLabels:
+                      Visibility: VISIBLE
+                      MeasureLabelVisibility: VISIBLE
+                      Overlap: DISABLE_OVERLAP
+                    Tooltip:
+                      TooltipVisibility: VISIBLE
+                      SelectedTooltipType: DETAILED
+                      FieldBasedTooltip:
+                        AggregationVisibility: HIDDEN
+                        TooltipTitleType: PRIMARY_VALUE
+                        TooltipFields:
+                          - FieldTooltipItem:
+                              FieldId: pie-gs-cat
+                              Visibility: VISIBLE
+                          - FieldTooltipItem:
+                              FieldId: pie-gs-val
+                              Visibility: VISIBLE
+                  Actions: []
+                  ColumnHierarchies: []
+            Layouts:
+              - Configuration:
+                  GridLayout:
+                    Elements:
+                      - ElementId: ContactsTable
+                        ElementType: VISUAL
+                        ColumnIndex: 0
+                        ColumnSpan: 36
+                        RowIndex: 0
+                        RowSpan: 12
+                      - ElementId: StatusPieChart
+                        ElementType: VISUAL
+                        ColumnIndex: 0
+                        ColumnSpan: 18
+                        RowIndex: 12
+                        RowSpan: 12
+                      - ElementId: GroundStationPieChart
+                        ElementType: VISUAL
+                        ColumnIndex: 18
+                        ColumnSpan: 18
+                        RowIndex: 12
+                        RowSpan: 12
+                    CanvasSizeOptions:
+                      ScreenCanvasSizeOptions:
+                        ResizeOption: FIXED
+                        OptimizedViewPortWidth: "1600px"
+            SheetControlLayouts:
+              - Configuration:
+                  GridLayout:
+                    Elements:
+                      - ElementId: fc-contactid
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-groundstation
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-contactstatus
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-satellitearn
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-missionprofilearn
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-starttime
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-endtime
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-curcontactid
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-tags
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
+                      - ElementId: fc-region
+                        ElementType: FILTER_CONTROL
+                        ColumnSpan: 2
+                        RowSpan: 1
