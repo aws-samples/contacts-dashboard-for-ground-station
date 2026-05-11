@@ -1,6 +1,6 @@
 # Creating the Ground Station Dashboard via the QuickSight UI
 
-This guide walks through manually creating the Ground Station contacts dashboard in Amazon QuickSight. Use this if the CloudFormation stack deploys everything except the dashboard itself (i.e., the DataSource and DataSet already exist).
+This guide walks through manually creating the Ground Station contacts dashboard in Amazon QuickSight. Use this if you set the `DeployDashboard` parameter to `no` when deploying the `gsdashboard-part2.yml` CloudFormation stack. In that case, the DataSource and DataSet are still created automatically — only the dashboard itself is skipped.
 
 ## Prerequisites
 

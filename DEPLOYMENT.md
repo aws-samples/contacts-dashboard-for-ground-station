@@ -217,6 +217,7 @@ arn:aws:quicksight:us-east-1:123456789012:user/default/admin/doe-john
     * **GStable**: Name of the table storing Ground Station contacts data (see point 2 above).
     * **GsContactPart1StackName**: Name of the CloudFormation stack created in [2. Solution back-end deployment](./DEPLOYMENT.md#2-solution-back-end-deployment).
     * **ApplicationTag**: Tag value for the tag that is added to the created resources. Tag key will be 'application'.
+    * **DeployDashboard**: Whether to deploy the pre-built QuickSight dashboard. Set to `yes` (default) to deploy the dashboard automatically, or `no` to skip dashboard creation and build it manually using the [Dashboard UI Guide](./DASHBOARD_UI_GUIDE.md). The DataSource and DataSet are always created regardless of this setting.
 
 10. Choose **Next**.
 

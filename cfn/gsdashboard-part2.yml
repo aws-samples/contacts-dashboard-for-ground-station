@@ -45,6 +45,17 @@ Parameters:
     Default: 'gs-contact-reporting'
     AllowedPattern: "^[a-z0-9-]+$"
 
+  DeployDashboard:
+    Type: String
+    Description: Whether to deploy the QuickSight dashboard. Set to 'no' if you want to create the dashboard manually using the Dashboard UI Guide.
+    Default: 'yes'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+
+Conditions:
+  ShouldDeployDashboard: !Equals [!Ref DeployDashboard, 'yes']
+
 Resources:
 
 ###########################################################################
@@ -833,6 +844,7 @@ Resources:
             
   GSDashboard:
     Type: AWS::QuickSight::Dashboard
+    Condition: ShouldDeployDashboard
     DependsOn: GSDashboardQSDataSet
     Properties:
       Tags:
