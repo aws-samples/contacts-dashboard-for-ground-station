@@ -2,7 +2,7 @@
 
 This guide walks through manually creating the Ground Station contacts dashboard in Amazon QuickSight. Use this if you set the `DeployDashboard` parameter to `no` when deploying the `gsdashboard-part2.yml` CloudFormation stack. In that case, the DataSource and DataSet are still created automatically — only the dashboard itself is skipped.
 
-> QuickSight console labels and layouts change over time. For the mechanics of adding visuals, filters, and dashboards, refer to the [Amazon QuickSight User Guide](https://docs.aws.amazon.com/quicksight/latest/user/welcome.html). If this guide and `cfn/gsdashboard-part2.yml` disagree, the CloudFormation template is the source of truth.
+> QuickSight console labels and layouts change over time. For the mechanics of adding visuals, filters, and dashboards, refer to the [Amazon Quick Sight User Guide](https://docs.aws.amazon.com/quicksuite/latest/userguide/welcome.html). If this guide and `cfn/gsdashboard-part2.yml` disagree, the CloudFormation template is the source of truth.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ This guide walks through manually creating the Ground Station contacts dashboard
 
 ## Step 1: Create a new analysis
 
-Create a new **Interactive sheet** analysis on the **GSDashboardQSDataset** dataset. See [Starting an analysis](https://docs.aws.amazon.com/quicksight/latest/user/starting-a-new-analysis.html).
+Create a new **Interactive sheet** analysis on the **GSDashboardQSDataset** dataset. See [Starting an analysis](https://docs.aws.amazon.com/quicksuite/latest/userguide/creating-an-analysis.html).
 
 ## Step 2: Rename the sheet
 
@@ -39,7 +39,7 @@ Set the aggregation for `starttime` and `endtime` to **Second**.
 
 Title: **AWS Ground Station contacts information and mapping to Cost and Usage Report fields**
 
-Size the visual so more rows and columns are visible. See [Adding a visual](https://docs.aws.amazon.com/quicksight/latest/user/adding-a-visual.html) and [Formatting a visual](https://docs.aws.amazon.com/quicksight/latest/user/formatting-a-visual-in-quicksight.html).
+Size the visual so more rows and columns are visible. See [Adding a visual](https://docs.aws.amazon.com/quicksuite/latest/userguide/creating-a-visual.html) and [Formatting data labels](https://docs.aws.amazon.com/quicksuite/latest/userguide/customizing-visual-data-labels.html).
 
 ## Step 4: Add the "Contacts by Status" pie chart
 
@@ -96,8 +96,8 @@ Add a filter on each of the following fields, scoped to the contacts table. For 
 - `tags`
 - `region`
 
-See [Filtering data](https://docs.aws.amazon.com/quicksight/latest/user/filtering-visual-data.html) and [Filter controls](https://docs.aws.amazon.com/quicksight/latest/user/filter-controls.html).
+See [Filtering data](https://docs.aws.amazon.com/quicksuite/latest/userguide/adding-a-filter.html) and [Filter controls](https://docs.aws.amazon.com/quicksuite/latest/userguide/filter-controls.html).
 
 ## Step 8: Publish as a dashboard
 
-Publish the analysis as a new dashboard named **GSDashboard**. See [Creating a dashboard](https://docs.aws.amazon.com/quicksight/latest/user/creating-a-dashboard.html).
+Publish the analysis as a new dashboard named **GSDashboard**. See [Creating a dashboard](https://docs.aws.amazon.com/quicksuite/latest/userguide/creating-a-dashboard.html).
